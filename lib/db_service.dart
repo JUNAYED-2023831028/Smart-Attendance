@@ -4,6 +4,18 @@ import 'package:intl/intl.dart';
 import 'dart:io' show Platform;
 import 'app_constants.dart';
 
+class AttendanceMatrixResult {
+  final List<Map<String, dynamic>> students;
+  final List<String> dateKeys;
+  final Map<String, Set<String>> presentMap;
+
+  AttendanceMatrixResult({
+    required this.students,
+    required this.dateKeys,
+    required this.presentMap,
+  });
+}
+
 class DbService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
@@ -275,5 +287,82 @@ class DbService {
 
   Stream<QuerySnapshot> streamAllSubjects() {
     return _firestore.collection(AppConstants.collectionSubjects).snapshots();
+  }
+
+  Future<List<Map<String, dynamic>>> fetchStudentsForBatch(String batch) async {
+    QuerySnapshot studentSnap = await _firestore
+        .collection(AppConstants.collectionStudents)
+        .where('batch', isEqualTo: batch)
+        .get();
+
+    List<Map<String, dynamic>> students = studentSnap.docs.map((doc) {
+      var data = doc.data() as Map<String, dynamic>;
+      return {
+        'uid': doc.id,
+        'name': data['name'] ?? 'Unknown',
+        'studentId': data['studentId'] ?? '',
+      };
+    }).toList();
+
+    students.sort(
+      (a, b) => (a['studentId'] as String).compareTo(b['studentId'] as String),
+    );
+    return students;
+  }
+
+  Future<String> fetchDepartmentForSubject(String subjectId) async {
+    try {
+      DocumentSnapshot subjectDoc = await _firestore
+          .collection(AppConstants.collectionSubjects)
+          .doc(subjectId)
+          .get();
+      if (!subjectDoc.exists) return '';
+      var subjectData = subjectDoc.data() as Map<String, dynamic>;
+      String teacherId = subjectData['assignedTeacherId'] ?? '';
+      if (teacherId.isEmpty) return '';
+
+      DocumentSnapshot teacherDoc = await _firestore
+          .collection(AppConstants.collectionUsers)
+          .doc(teacherId)
+          .get();
+      if (!teacherDoc.exists) return '';
+      var teacherData = teacherDoc.data() as Map<String, dynamic>;
+      return teacherData['dept'] ?? '';
+    } catch (e) {
+      return '';
+    }
+  }
+
+  Future<AttendanceMatrixResult> buildAttendanceMatrix({
+    required String subjectId,
+    required String batch,
+  }) async {
+    final students = await fetchStudentsForBatch(batch);
+
+    QuerySnapshot recordSnap = await _firestore
+        .collection(AppConstants.collectionRecords)
+        .where('subjectId', isEqualTo: subjectId)
+        .where('batch', isEqualTo: batch)
+        .get();
+
+    Set<String> dateKeysSet = {};
+    Map<String, Set<String>> presentMap = {};
+
+    for (var doc in recordSnap.docs) {
+      var data = doc.data() as Map<String, dynamic>;
+      String dateKey = data['dateKey'] ?? '';
+      String studentUid = data['studentId'] ?? '';
+      if (dateKey.isEmpty) continue;
+      dateKeysSet.add(dateKey);
+      presentMap.putIfAbsent(studentUid, () => <String>{}).add(dateKey);
+    }
+
+    List<String> dateKeys = dateKeysSet.toList()..sort();
+
+    return AttendanceMatrixResult(
+      students: students,
+      dateKeys: dateKeys,
+      presentMap: presentMap,
+    );
   }
 }

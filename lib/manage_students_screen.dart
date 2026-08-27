@@ -206,6 +206,7 @@ class _ManageStudentsScreenState extends State<ManageStudentsScreen> {
                         ),
                         const SizedBox(height: 10),
                         TextFormField(
+                          
                           controller: _sessionController,
                           decoration: _fieldDecoration(
                             'Session (e.g. 2023-2024)',
