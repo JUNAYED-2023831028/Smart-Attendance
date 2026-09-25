@@ -23,4 +23,5 @@ The app is made to save time and reduce manual work.
 - Dart
 - Firebase Authentication
 - Cloud Firestore
-- Firebase Storage
+- Firestore Storage
+- 
